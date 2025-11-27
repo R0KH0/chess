@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tournament Bracket Manager</title>
+    <title>ARK-X Chess Tournament</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -13,7 +13,7 @@
             font-family: 'Inter', sans-serif;
             background-color: #0f172a;
             color: white;
-            overflow-x: auto; /* Allow horizontal scroll for large brackets */
+            overflow-x: auto; 
         }
 
         /* Custom Scrollbar */
@@ -37,7 +37,8 @@
             display: flex;
             flex-direction: row;
             padding: 40px;
-            min-width: 1600px; /* Increased for 5 columns */
+            min-width: 1000px; /* Reduced width for 3 rounds */
+            justify-content: center;
         }
 
         .round {
@@ -60,17 +61,6 @@
             transition: all 0.2s ease;
         }
         
-        /* Specific styling for matches that are just Byes */
-        .match.bye-match {
-            background-color: transparent;
-            border: 1px dashed #334155;
-            opacity: 0.7;
-        }
-        .match.bye-match:hover {
-            border-color: #475569;
-            opacity: 1;
-        }
-
         .match:hover {
             border-color: #64748b;
         }
@@ -79,19 +69,11 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 4px 8px; /* Compact padding */
+            padding: 4px 8px; 
             border-radius: 4px;
             cursor: pointer;
             transition: background 0.2s;
             margin-bottom: 2px;
-        }
-
-        .team:last-child {
-            margin-bottom: 0;
-        }
-
-        .team:hover {
-            background-color: #334155;
         }
 
         .team input {
@@ -99,15 +81,10 @@
             border: none;
             color: #e2e8f0;
             width: 100%;
-            font-size: 0.85rem; /* Slightly smaller font for density */
+            font-size: 0.85rem; 
             outline: none;
             font-weight: 500;
         }
-
-        .team input::placeholder {
-            color: #64748b;
-        }
-
         .team input:focus {
             border-bottom: 1px solid #3b82f6;
         }
@@ -127,31 +104,12 @@
             background-color: rgba(34, 197, 94, 0.2);
             border-left: 3px solid #4ade80;
         }
-        
         .team.won input {
             color: #4ade80;
             font-weight: 700;
         }
         
-        /* Styles for disabled/bye inputs */
-        .team.bye-slot {
-            pointer-events: none;
-        }
-        .team.bye-slot input {
-            color: #64748b;
-            font-style: italic;
-            font-size: 0.75rem;
-        }
-
         /* Connector Lines */
-        .connector {
-            position: absolute;
-            right: -40px;
-            width: 20px;
-            border-right: 2px solid #475569;
-        }
-        
-        /* Logic to draw lines between matches */
         .round:not(:last-child) .match::after {
             content: '';
             position: absolute;
@@ -161,7 +119,6 @@
             height: 2px;
             background-color: #475569;
         }
-
         .round:not(:first-child) .match::before {
             content: '';
             position: absolute;
@@ -172,13 +129,10 @@
             background-color: #475569;
         }
 
-        /* Vertical connectors for pairing */
-        .match-pair-connector {
-            position: absolute;
-            right: -20px;
-            width: 2px;
-            background-color: #475569;
-        }
+        /* Adjusting Match vertical position for LB/GF to make it look like a DE structure */
+        .round-0 { padding-top: 100px; }
+        .round-1 { margin-top: 150px; } /* Push LB down */
+        .round-2 { padding-top: 100px; } 
 
         /* Champion Section */
         .champion-container {
@@ -209,7 +163,7 @@
     <!-- Header -->
     <div class="fixed top-0 left-0 w-full bg-slate-900/90 backdrop-blur-md border-b border-slate-700 z-40 px-6 py-4 flex justify-between items-center">
         <div>
-            <h1 class="text-xl font-bold text-blue-400"><i class="fas fa-trophy mr-2"></i>ARK-X Chess Tournament (FEZ)</h1>
+            <h1 class="text-xl font-bold text-blue-400"><i class="fas fa-trophy mr-2"></i>ARK-X Chess Tournament (groundfinal)</h1>
         </div>
         <div class="text-xs text-slate-500 hidden sm:block">
             <span id="status-msg">Auto-saving enabled</span>
@@ -217,7 +171,7 @@
     </div>
 
     <!-- Main Bracket Area -->
-    <div class="pt-24 pb-20 overflow-x-auto min-h-screen flex items-center">
+    <div class="pt-24 pb-20 overflow-x-auto min-h-screen flex items-center justify-center">
         <div id="bracket-root" class="bracket-container">
             <!-- Bracket will be injected here by JS -->
         </div>
@@ -229,82 +183,27 @@
     </button>
 
     <script>
-        // Configuration: 20 Teams
-        // Round 1 (32 slots): 12 Byes, 4 Matches (8 Teams playing)
-        // Round 2 (16 slots): 16 Teams (12 Byes + 4 Winners)
+        // Key for local storage - updated to v4 for 3-match structure
+        const STORAGE_KEY = 'tournament_bracket_3match_de_v4';
         
-        // Key for local storage - changed to v2 to avoid conflicts with previous versions
-        const STORAGE_KEY = 'tournament_bracket_20team_v2';
-        
-        // Initial state structure
+        // --- 1. Initial State Setup ---
+
         function createDefaultData() {
-            // We need 16 matches in Round 1.
-            // 20 Teams total.
-            // 32 (Slots) - 20 (Teams) = 12 Byes.
-            // Teams playing in R1 = 20 - 12 = 8 Teams.
-            // Matches playing in R1 = 8 / 2 = 4 Matches.
-            // Matches with Byes in R1 = 12 Matches.
-            
-            // Logic: Evenly distribute the 4 "Play-in" matches across the 16 slots
-            // Indices: 0, 4, 8, 12 will be Real Matches. Rest are Byes.
-            const realMatchIndices = [0, 4, 8, 12];
-            
-            let teamCounter = 1;
+            // R0: WB Final (1 match) - Winner to GF P1, Loser to LB Final P1
+            const round0Matches = [{ id: `r0-m0`, p1: "Team A", p2: "Team B", winner: null, type: 'WB Final' }];
 
-            const round1Matches = Array.from({length: 16}, (_, i) => {
-                const isRealMatch = realMatchIndices.includes(i);
-                
-                if (isRealMatch) {
-                    // This is a match between two teams
-                    return {
-                        id: `r1-m${i}`,
-                        p1: `Team ${teamCounter++}`,
-                        p2: `Team ${teamCounter++}`,
-                        winner: null,
-                        isByeMatch: false
-                    };
-                } else {
-                    // This is a BYE match (One team vs BYE)
-                    // The "Winner" is pre-set effectively, but we handle it in init
-                    return {
-                        id: `r1-m${i}`,
-                        p1: `Team ${teamCounter++}`,
-                        p2: "BYE",
-                        winner: 1, // Auto-advance player 1
-                        isByeMatch: true
-                    };
-                }
-            });
+            // R1: LB Final (1 match) - P1 is R0 Loser. P2 is pre-seeded Team C. Winner to GF P2, Loser is 3rd/4th
+            const round1Matches = [{ id: `r1-m0`, p1: null, p2: "Team C", winner: null, type: 'LB Final' }];
 
-            // Round 2 needs to know about the auto-winners from R1
-            const round2Matches = Array.from({length: 8}, (_, i) => {
-                // Determine source matches from R1
-                const m1Index = i * 2;
-                const m2Index = i * 2 + 1;
-                
-                const m1 = round1Matches[m1Index];
-                const m2 = round1Matches[m2Index];
-                
-                // Pre-fill if R1 was a bye match
-                const p1Val = (m1.isByeMatch) ? m1.p1 : null;
-                const p2Val = (m2.isByeMatch) ? m2.p1 : null;
-                
-                return { 
-                    id: `r2-m${i}`, 
-                    p1: p1Val, 
-                    p2: p2Val, 
-                    winner: null 
-                };
-            });
+            // R2: Grand Final (1 match) - P1 is R0 Winner. P2 is R1 Winner. Champion is winner.
+            const round2Matches = [{ id: `r2-m0`, p1: null, p2: null, winner: null, type: 'Grand Final' }];
+
 
             return {
                 rounds: [
-                    { id: 0, matches: round1Matches },
-                    { id: 1, matches: round2Matches },
-                    // Standard cleanup for rest
-                    { id: 2, matches: Array.from({length: 4}, (_, i) => ({ id: `r3-m${i}`, p1: null, p2: null, winner: null })) },
-                    { id: 3, matches: Array.from({length: 2}, (_, i) => ({ id: `r4-m${i}`, p1: null, p2: null, winner: null })) },
-                    { id: 4, matches: Array.from({length: 1}, (_, i) => ({ id: `r5-m${i}`, p1: null, p2: null, winner: null })) }
+                    { id: 0, matches: round0Matches, name: "Winners' Bracket Final" },
+                    { id: 1, matches: round1Matches, name: "Losers' Bracket Final" },
+                    { id: 2, matches: round2Matches, name: "Grand Final" }
                 ],
                 champion: null
             };
@@ -312,7 +211,7 @@
 
         let bracketData = createDefaultData();
 
-        // --- Core Logic ---
+        // --- 2. Persistence and Initialization ---
 
         function init() {
             loadState();
@@ -335,14 +234,13 @@
             if (saved) {
                 bracketData = JSON.parse(saved);
             } else {
-                // First load? Ensure default data is fresh and logic runs
                 bracketData = createDefaultData(); 
                 saveState();
             }
         }
 
         function resetTournament() {
-            if(confirm("Are you sure you want to reset the tournament to 20 Teams?")) {
+            if(confirm("Are you sure you want to reset the 3-match tournament?")) {
                 bracketData = createDefaultData();
                 saveState();
                 renderBracket();
@@ -350,78 +248,110 @@
         }
 
         function updateName(roundIndex, matchIndex, playerSlot, newName) {
-            const currentRound = bracketData.rounds[roundIndex];
-            const match = currentRound.matches[matchIndex];
+            const match = bracketData.rounds[roundIndex].matches[matchIndex];
             
             if (playerSlot === 1) match.p1 = newName;
             else match.p2 = newName;
             
-            // Automatic propagation logic
-            // If this is a BYE match (Round 1 only), updating the P1 name should instantly update Round 2
-            if (roundIndex === 0 && match.isByeMatch && playerSlot === 1) {
-                // Force update next round without needing a winner click (since it's auto-won)
-                updateNextRoundSlot(roundIndex, matchIndex, newName);
-            }
-            
-            // Standard propagation if winner is selected
+            // Re-propagate if the name of a winner is changed
             if (match.winner === 1 && playerSlot === 1) advanceWinner(roundIndex, matchIndex, 1, false);
             if (match.winner === 2 && playerSlot === 2) advanceWinner(roundIndex, matchIndex, 2, false);
 
             saveState();
+            renderBracket();
         }
 
         function advanceWinner(roundIndex, matchIndex, playerSlot, toggle = true) {
-            const currentRound = bracketData.rounds[roundIndex];
-            const match = currentRound.matches[matchIndex];
+            const match = bracketData.rounds[roundIndex].matches[matchIndex];
             
-            // Prevent interaction with Bye slots in Round 1
-            if (roundIndex === 0 && match.isByeMatch) return;
-
             const winnerName = playerSlot === 1 ? match.p1 : match.p2;
+            const loserName = playerSlot === 1 ? match.p2 : match.p1;
+            
             if (!winnerName) return; 
 
             // Logic to toggle
             if (toggle && match.winner === playerSlot) {
                 match.winner = null;
-                updateNextRoundSlot(roundIndex, matchIndex, null);
+                updateNextRound(roundIndex, winnerName, null, true); // Clear winner path
+                
+                // Clear loser path if necessary (WB Final only)
+                if (roundIndex === 0) {
+                    updateLoserBracket(null);
+                }
+
                 saveState();
                 renderBracket();
                 return;
             }
 
+            // Set winner
             match.winner = playerSlot;
+            
+            // 1. Advance Winner
+            updateNextRound(roundIndex, winnerName, winnerName);
 
-            if (roundIndex === bracketData.rounds.length - 1) {
+            // 2. Drop Loser to LB (Only for WB Final - R0)
+            if (roundIndex === 0) {
+                updateLoserBracket(loserName);
+            } else if (roundIndex === 2) { // Grand Final
                 bracketData.champion = winnerName;
-            } else {
-                updateNextRoundSlot(roundIndex, matchIndex, winnerName);
             }
 
             saveState();
             renderBracket();
         }
 
-        function updateNextRoundSlot(currentRoundIndex, currentMatchIndex, name) {
-            if (currentRoundIndex >= bracketData.rounds.length - 1) return;
+        // Handles advancement of the WINNER
+        function updateNextRound(currentRoundIndex, sourceName, name, isClear = false) {
+            if (currentRoundIndex === 2) return; // Grand Final is the end
 
-            const nextRoundIndex = currentRoundIndex + 1;
-            const nextMatchIndex = Math.floor(currentMatchIndex / 2);
-            const nextPlayerSlot = (currentMatchIndex % 2 === 0) ? 1 : 2; 
+            let nextRoundIndex = 2; // Default to Grand Final (R2)
+            let nextMatchIndex = 0;
+            let nextPlayerSlot;
+
+            if (currentRoundIndex === 0) {
+                // WB Final Winner (R0) goes to Grand Final P1 (R2 M0 P1)
+                nextPlayerSlot = 1;
+            } else if (currentRoundIndex === 1) {
+                // LB Final Winner (R1) goes to Grand Final P2 (R2 M0 P2)
+                nextPlayerSlot = 2;
+            }
 
             const nextMatch = bracketData.rounds[nextRoundIndex].matches[nextMatchIndex];
-            
+            if (!nextMatch) return console.error(`Missing next match R${nextRoundIndex}-M${nextMatchIndex}`);
+
             if (nextPlayerSlot === 1) nextMatch.p1 = name;
             else nextMatch.p2 = name;
 
-            // If the match in the NEXT round already has a winner, reset it to avoid stale data
-            // UNLESS it's an auto-bye match, but R2+ don't have auto-byes in this setup
+            // If the match in the NEXT round already has a winner, clear subsequent rounds
+            if (nextMatch.winner && !isClear) {
+                nextMatch.winner = null;
+                updateNextRound(nextRoundIndex, sourceName, null, true); 
+            }
+        }
+        
+        // Handles demotion of the LOSER from WB Final (R0)
+        function updateLoserBracket(loserName) {
+            // Loser of R0 (WB Final) goes to R1 M0 P1 (LB Final P1)
+            const nextRoundIndex = 1;
+            const nextMatchIndex = 0; // LB Final
+            const nextPlayerSlot = 1;
+
+            const nextMatch = bracketData.rounds[nextRoundIndex].matches[nextMatchIndex];
+            if (!nextMatch) return console.error(`Missing LB match R${nextRoundIndex}-M${nextMatchIndex}`);
+
+            // Update the slot
+            nextMatch.p1 = loserName;
+            
+            // Clear subsequent winners if an entrant changes
             if (nextMatch.winner) {
                 nextMatch.winner = null;
-                updateNextRoundSlot(nextRoundIndex, nextMatchIndex, null); 
+                // If we clear R1, we must also clear R2 slot for this path
+                updateNextRound(nextRoundIndex, loserName, null, true);
             }
         }
 
-        // --- Rendering ---
+        // --- 3. Rendering ---
 
         function renderBracket() {
             const container = document.getElementById('bracket-root');
@@ -429,41 +359,32 @@
 
             bracketData.rounds.forEach((round, rIndex) => {
                 const roundDiv = document.createElement('div');
-                roundDiv.className = 'round';
+                roundDiv.className = `round round-${rIndex}`;
                 
                 // Round Header
                 const header = document.createElement('div');
                 header.className = "text-center text-slate-500 text-sm font-bold mb-4 uppercase tracking-wider absolute -top-8 w-full";
+                header.innerText = round.name;
                 
-                if(rIndex === 0) header.innerText = "Round 1 (Play-ins)";
-                else if(rIndex === 1) header.innerText = "Round 2 (16)";
-                else if(rIndex === 2) header.innerText = "Quarter Finals";
-                else if(rIndex === 3) header.innerText = "Semi Finals";
-                else if(rIndex === 4) header.innerText = "Finals";
-                
+                // Special styling for LB/GF rounds
+                if (rIndex === 1) {
+                    header.innerHTML = `<span class="text-red-400"><i class="fas fa-hand-fist mr-1"></i> ${round.name}</span>`;
+                }
+                if (rIndex === 2) {
+                    header.innerHTML = `<span class="text-yellow-400"><i class="fas fa-star mr-1"></i> ${round.name}</span>`;
+                }
+
                 roundDiv.appendChild(header);
 
                 round.matches.forEach((match, mIndex) => {
                     const matchDiv = document.createElement('div');
-                    // Add special class for Bye matches in Round 1
-                    const isByeMatch = (rIndex === 0 && match.isByeMatch);
-                    matchDiv.className = `match ${isByeMatch ? 'bye-match' : ''}`;
+                    matchDiv.className = `match`;
+                    matchDiv.title = match.type || ''; 
 
-                    if (isByeMatch) {
-                        // Render Simplified View for Bye Match
-                        // Just Player 1 input, showing they qualify automatically
-                        matchDiv.appendChild(createTeamElement(rIndex, mIndex, 1, match.p1, true, false)); // True for isWinner (visual green), false for showBtn
-                        
-                        // Fake P2 slot saying "Bye"
-                        const byeDiv = document.createElement('div');
-                        byeDiv.className = 'team bye-slot';
-                        byeDiv.innerHTML = `<span class="text-xs text-slate-500 italic px-2">Direct Entry to Round 2</span>`;
-                        matchDiv.appendChild(byeDiv);
-                    } else {
-                        // Standard Match
-                        matchDiv.appendChild(createTeamElement(rIndex, mIndex, 1, match.p1, match.winner === 1, true));
-                        matchDiv.appendChild(createTeamElement(rIndex, mIndex, 2, match.p2, match.winner === 2, true));
-                    }
+                    // P1
+                    matchDiv.appendChild(createTeamElement(rIndex, mIndex, 1, match.p1, match.winner === 1, true));
+                    // P2
+                    matchDiv.appendChild(createTeamElement(rIndex, mIndex, 2, match.p2, match.winner === 2, true));
 
                     roundDiv.appendChild(matchDiv);
                 });
@@ -491,11 +412,14 @@
             const input = document.createElement('input');
             input.type = 'text';
             input.value = name || '';
-            input.placeholder = (rIndex === 0 && name && name.includes('Team')) ? name : "Waiting...";
+            input.placeholder = (rIndex === 1 && slot === 1) ? "Loser of WB Final" : "TBD";
             
-            // If it's a generated "Waiting..." or empty slot in later rounds, don't allow typing unless populated
-            // But we allow full editing for flexibility
-            input.addEventListener('input', (e) => updateName(rIndex, mIndex, slot, e.target.value));
+            // Prevent editing of the Loser slot in the LB Final
+            if (rIndex === 1 && slot === 1 && !name) {
+                input.readOnly = true;
+            } else {
+                input.addEventListener('input', (e) => updateName(rIndex, mIndex, slot, e.target.value));
+            }
             
             div.appendChild(input);
 
@@ -503,7 +427,7 @@
                 const btn = document.createElement('button');
                 btn.className = 'winner-btn';
                 btn.innerHTML = '<i class="fas fa-check-circle"></i>';
-                btn.title = "Mark as Winner";
+                btn.title = "Mark as Winner / Advance";
                 btn.onclick = () => advanceWinner(rIndex, mIndex, slot);
                 div.appendChild(btn);
             }
